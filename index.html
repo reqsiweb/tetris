@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetris</title>
+<style>
+  body { font-family: sans-serif; text-align: center; background: #222; color: #fff; margin-top: 20px; }
+  canvas { background: #000; border: 3px solid #888; }
+  #info { font-size: 20px; margin: 10px; }
+  button { padding: 8px 16px; font-size: 16px; }
+</style>
+</head>
+<body>
+  <h1>Tetris</h1>
+  <div id="info">Skor: <span id="skor">0</span></div>
+  <canvas id="papan" width="300" height="600"></canvas>
+  <p>← → geser | ↑ putar | ↓ turun | Spasi jatuh langsung</p>
+  <button onclick="mulai()">Main Lagi</button>
+
+<script>
+const KOLOM = 10, BARIS = 20, UKURAN = 30;
+const kanvas = document.getElementById("papan");
+const ctx = kanvas.getContext("2d");
+
+// 7 bentuk blok (1 = terisi)
+const BENTUK = [
+  [[1,1,1,1]],            // I
+  [[1,1],[1,1]],          // O
+  [[0,1,0],[1,1,1]],      // T
+  [[1,0,0],[1,1,1]],      // J
+  [[0,0,1],[1,1,1]],      // L
+  [[0,1,1],[1,1,0]],      // S
+  [[1,1,0],[0,1,1]]       // Z
+];
+const WARNA = ["#00f0f0","#f0f000","#a000f0","#0000f0","#f0a000","#00f000","#f00000"];
+
+let papan, blok, skor, selesai, timer;
+
+// ---------- LOGIKA ----------
+
+// cek apakah bentuk di posisi (x, y) menabrak dinding / blok lain
+function bentur(bentuk, x, y) {
+  for (let r = 0; r < bentuk.length; r++) {
+    for (let c = 0; c < bentuk[r].length; c++) {
+      if (!bentuk[r][c]) continue;
+      const nx = x + c, ny = y + r;
+      if (nx < 0 || nx >= KOLOM || ny >= BARIS) return true;
+      if (ny >= 0 && papan[ny][nx]) return true;
+    }
+  }
+  return false;
+}
+
+function blokBaru() {
+  const i = Math.floor(Math.random() * BENTUK.length);
+  const bentuk = BENTUK[i].map(baris => [...baris]);
+  blok = {
+    bentuk: bentuk,
+    warna: WARNA[i],
+    x: Math.floor((KOLOM - bentuk[0].length) / 2),
+    y: 0
+  };
+  if (bentur(blok.bentuk, blok.x, blok.y)) selesai = true;
+}
+
+// tempel blok ke papan, lalu hapus baris yang penuh
+function kunci() {
+  blok.bentuk.forEach((baris, r) => {
+    baris.forEach((isi, c) => {
+      if (isi) papan[blok.y + r][blok.x + c] = blok.warna;
+    });
+  });
+  hapusBaris();
+  blokBaru();
+}
+
+function hapusBaris() {
+  const sisa = papan.filter(baris => baris.some(sel => !sel));
+  const jumlah = BARIS - sisa.length;
+  if (jumlah === 0) return;
+  while (sisa.length < BARIS) sisa.unshift(Array(KOLOM).fill(0));
+  papan = sisa;
+  skor += [0, 100, 300, 500, 800][jumlah];
+  document.getElementById("skor").textContent = skor;
+}
+
+function turun() {
+  if (selesai) return;
+  if (!bentur(blok.bentuk, blok.x, blok.y + 1)) blok.y++;
+  else kunci();
+  gambar();
+}
+
+function geser(arah) {
+  if (selesai) return;
+  if (!bentur(blok.bentuk, blok.x + arah, blok.y)) blok.x += arah;
+  gambar();
+}
+
+function putar() {
+  if (selesai) return;
+  const baru = blok.bentuk[0].map((_, i) => blok.bentuk.map(baris => baris[i]).reverse());
+  // coba putar di posisi sekarang, kalau mentok coba geser sedikit
+  for (const geserX of [0, -1, 1]) {
+    if (!bentur(baru, blok.x + geserX, blok.y)) {
+      blok.bentuk = baru;
+      blok.x += geserX;
+      break;
+    }
+  }
+  gambar();
+}
+
+function jatuhLangsung() {
+  if (selesai) return;
+  while (!bentur(blok.bentuk, blok.x, blok.y + 1)) blok.y++;
+  kunci();
+  gambar();
+}
+
+// ---------- TAMPILAN ----------
+
+function kotak(x, y, warna) {
+  ctx.fillStyle = warna;
+  ctx.fillRect(x * UKURAN, y * UKURAN, UKURAN, UKURAN);
+  ctx.strokeStyle = "#000";
+  ctx.strokeRect(x * UKURAN, y * UKURAN, UKURAN, UKURAN);
+}
+
+function gambar() {
+  ctx.clearRect(0, 0, kanvas.width, kanvas.height);
+  for (let r = 0; r < BARIS; r++)
+    for (let c = 0; c < KOLOM; c++)
+      if (papan[r][c]) kotak(c, r, papan[r][c]);
+
+  if (!selesai) {
+    blok.bentuk.forEach((baris, r) => {
+      baris.forEach((isi, c) => {
+        if (isi) kotak(blok.x + c, blok.y + r, blok.warna);
+      });
+    });
+  } else {
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(0, 250, kanvas.width, 100);
+    ctx.fillStyle = "#fff";
+    ctx.font = "32px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("GAME OVER", kanvas.width / 2, 310);
+  }
+}
+
+// ---------- KONTROL ----------
+
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") { e.preventDefault(); geser(-1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); geser(1); }
+  else if (e.key === "ArrowDown") { e.preventDefault(); turun(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); putar(); }
+  else if (e.key === " ") { e.preventDefault(); jatuhLangsung(); }
+});
+
+function mulai() {
+  papan = Array.from({ length: BARIS }, () => Array(KOLOM).fill(0));
+  skor = 0;
+  selesai = false;
+  document.getElementById("skor").textContent = 0;
+  clearInterval(timer);
+  blokBaru();
+  gambar();
+  timer = setInterval(turun, 500);
+}
+
+mulai();
+</script>
+</body>
+</html>
